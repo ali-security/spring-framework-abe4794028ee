@@ -24,6 +24,10 @@ inputs:
     description: 'Whether to publish artifacts ready for deployment to Artifactory'
     required: false
     default: 'false'
+  test-filter:
+    description: 'Gradle test task selector to run instead of the full test suite'
+    required: false
+    default: ''
 outputs:
   build-scan-url:
     description: 'URL, if any, of the build scan produced by the build'
@@ -46,12 +50,26 @@ runs:
       id: build
       if: ${{ inputs.publish == 'false' }}
       shell: bash
-      run: ./gradlew check antora
+      run: |
+        if [ -n "${{ inputs.test-filter }}" ]; then
+          ./gradlew assemble ${{ inputs.test-filter }}
+        else
+          ./gradlew check antora
+        fi
     - name: Publish
       id: publish
       if: ${{ inputs.publish == 'true' }}
       shell: bash
-      run: ./gradlew -PdeploymentRepository=$(pwd)/deployment-repository build publishAllPublicationsToDeploymentRepository
+      run: |
+        if [ -n "${{ inputs.test-filter }}" ]; then
+          ./gradlew -PdeploymentRepository=$(pwd)/deployment-repository assemble publishAllPublicationsToDeploymentRepository ${{ inputs.test-filter }}
+        else
+          ./gradlew -PdeploymentRepository=$(pwd)/deployment-repository build publishAllPublicationsToDeploymentRepository
+        fi
+    - name: Summarize Test Results
+      if: always()
+      shell: bash
+      run: python3 .github/scripts/summarize-test-results.py
     - name: Read Version From gradle.properties
       id: read-version
       shell: bash
